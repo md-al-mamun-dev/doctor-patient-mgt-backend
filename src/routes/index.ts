@@ -4,6 +4,8 @@ import { userRoutes } from './userRoutes.js';
 import { doctorRoutes } from './doctorRoutes.js';
 import { patientRoutes } from './patientRoutes.js';
 import { dashboardRoutes } from './dashboardRoutes.js';
+import { auditLogRoutes } from './auditLogRoutes.js';
+import { healthRoutes } from './healthRoutes.js';
 
 export const routes = Router();
 
@@ -12,4 +14,6 @@ routes.use('/users', userRoutes);
 routes.use('/doctors', doctorRoutes);
 routes.use('/patients', patientRoutes);
 routes.use('/dashboard', dashboardRoutes);
+routes.use('/audit-logs', auditLogRoutes);
+routes.use('/health', healthRoutes);
 
