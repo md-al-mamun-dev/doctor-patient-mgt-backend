@@ -7,9 +7,12 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "typecheck": "tsc --noEmit",
-    "build": "tsc",
+    "build": "tsc && pnpm docs:bundle",
     "start": "node dist/server.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "docs:lint": "redocly lint openapi/openapi.yaml",
+    "docs:bundle": "redocly bundle openapi/openapi.yaml -o dist/openapi.yaml",
+    "docs:build": "redocly build-docs openapi/openapi.yaml -o dist/api-docs.html"
   },
   "keywords": [],
   "author": "",
@@ -26,6 +29,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@redocly/cli": "^2.72.1",
     "@types/bcrypt": "^6.0.0",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",

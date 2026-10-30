@@ -1,0 +1,908 @@
+openapi: 3.1.0
+info:
+  title: Doctor & Patient Management System API
+  version: 1.0.0
+  description: |
+    Comprehensive RESTful API for healthcare administration managing doctor records, 
+    patient assignments, authentication, and clinical analytics.
+servers:
+  - url: /api/v1
+    description: Current Environment Base API
+
+tags:
+  - name: Auth
+    description: Authentication, session management, and current user profile
+  - name: Doctors
+    description: Doctor registry, specialty filters, and profile operations
+  - name: Patients
+    description: Patient registry, medical records, and doctor assignments
+  - name: Dashboard
+    description: Aggregate clinical metrics and distribution statistics
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      operationId: registerUser
+      summary: Register a new user
+      description: Creates a user account with assigned role (admin, doctor, patient) and issues an HttpOnly session cookie and JWT.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User registered successfully
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: token=eyJhbGciOi...; Path=/; HttpOnly; SameSite=Lax
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      operationId: loginUser
+      summary: User login
+      description: Verifies credentials and sets an HttpOnly JWT authentication cookie.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+                example: token=eyJhbGciOi...; Path=/; HttpOnly; SameSite=Lax
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccessResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      operationId: logoutUser
+      summary: User logout
+      description: Clears the authentication cookie.
+      responses:
+        '200':
+          description: Logged out successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      operationId: getCurrentUser
+      summary: Get current authenticated user
+      description: Returns the token payload of the currently authenticated user.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /doctors:
+    get:
+      tags: [Doctors]
+      operationId: listDoctors
+      summary: List doctors
+      description: Retrieves paginated doctor records with optional specialty and department filters.
+      parameters:
+        - name: page
+          in: query
+          description: Page number
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            default: 10
+        - name: specialty
+          in: query
+          description: Filter by specialty regex
+          schema:
+            type: string
+        - name: department
+          in: query
+          description: Filter by department regex
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Doctors retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+
+    post:
+      tags: [Doctors]
+      operationId: createDoctor
+      summary: Create a doctor profile
+      description: Creates a doctor profile linked to an existing User entity. Requires Admin privileges.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDoctorRequest'
+      responses:
+        '201':
+          description: Doctor created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorDetailResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /doctors/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Doctor MongoDB ObjectId
+        schema:
+          type: string
+          example: 6512bd8f12a3456789abcdef
+    get:
+      tags: [Doctors]
+      operationId: getDoctorById
+      summary: Get doctor by ID
+      description: Retrieves detailed doctor record by ObjectId.
+      responses:
+        '200':
+          description: Doctor retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorDetailResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    put:
+      tags: [Doctors]
+      operationId: updateDoctor
+      summary: Update doctor profile
+      description: Modifies doctor fields. Allowed for Admin or Doctor self-update.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateDoctorRequest'
+      responses:
+        '200':
+          description: Doctor updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorDetailResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    delete:
+      tags: [Doctors]
+      operationId: deleteDoctor
+      summary: Delete doctor
+      description: Deletes doctor profile. Requires Admin privileges.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Doctor deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /patients:
+    get:
+      tags: [Patients]
+      operationId: listPatients
+      summary: List patients
+      description: Retrieves paginated patient records with optional filters. Requires Admin or Doctor privileges.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: doctorId
+          in: query
+          description: Filter patients by assigned Doctor ObjectId
+          schema:
+            type: string
+        - name: gender
+          in: query
+          schema:
+            type: string
+            enum: [male, female, other]
+      responses:
+        '200':
+          description: Patients retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientListResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+    post:
+      tags: [Patients]
+      operationId: createPatient
+      summary: Create patient record
+      description: Registers a new patient record. Requires Admin or Doctor privileges.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePatientRequest'
+      responses:
+        '201':
+          description: Patient created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientDetailResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /patients/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Patient MongoDB ObjectId
+        schema:
+          type: string
+          example: 6512bd8f12a3456789abcde0
+    get:
+      tags: [Patients]
+      operationId: getPatientById
+      summary: Get patient by ID
+      description: Retrieves a single patient by ID.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Patient retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientDetailResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    put:
+      tags: [Patients]
+      operationId: updatePatient
+      summary: Update patient record
+      description: Modifies patient demographic, doctor assignment, or medical history.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePatientRequest'
+      responses:
+        '200':
+          description: Patient updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientDetailResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    delete:
+      tags: [Patients]
+      operationId: deletePatient
+      summary: Delete patient record
+      description: Removes patient record. Requires Admin privileges.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Patient deleted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StandardResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /dashboard/stats:
+    get:
+      tags: [Dashboard]
+      operationId: getDashboardStats
+      summary: Retrieve clinical dashboard analytics
+      description: Returns aggregate counts of doctors, patients, and users, alongside specialty and gender distribution breakdowns.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Dashboard stats retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardStatsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: token
+      description: HttpOnly JWT authentication cookie set upon login/register.
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Authorization header Bearer token for API clients.
+
+  schemas:
+    StandardResponse:
+      type: object
+      required: [success, message]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Operation completed successfully
+
+    PaginationMeta:
+      type: object
+      required: [page, limit, total, totalPages]
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        total:
+          type: integer
+          example: 45
+        totalPages:
+          type: integer
+          example: 5
+
+    RegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          example: Dr. Sarah Connor
+        email:
+          type: string
+          format: email
+          example: sarah.connor@hospital.org
+        password:
+          type: string
+          format: password
+          minLength: 6
+          example: SecurePass123!
+        role:
+          type: string
+          enum: [admin, doctor, patient]
+          default: patient
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: admin@hospital.org
+        password:
+          type: string
+          format: password
+          example: AdminPass123!
+
+    AuthSuccessResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Login successful
+        data:
+          type: object
+          properties:
+            user:
+              type: object
+              properties:
+                _id:
+                  type: string
+                  example: 6512bd8f12a3456789abcde1
+                name:
+                  type: string
+                  example: Admin User
+                email:
+                  type: string
+                  example: admin@hospital.org
+                role:
+                  type: string
+                  example: admin
+            token:
+              type: string
+              example: eyJhbGciOiJIUzI1NiIsInR5cCI...
+
+    UserProfileResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Current user profile
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+              example: 6512bd8f12a3456789abcde1
+            role:
+              type: string
+              example: admin
+            email:
+              type: string
+              example: admin@hospital.org
+
+    CreateDoctorRequest:
+      type: object
+      required: [userId, specialty, department]
+      properties:
+        userId:
+          type: string
+          description: 24-character hex MongoDB ObjectId of associated User
+          example: 6512bd8f12a3456789abcde2
+        specialty:
+          type: string
+          example: Cardiology
+        department:
+          type: string
+          example: Cardiovascular Clinic
+        phone:
+          type: string
+          example: +1-555-0199
+        isAvailable:
+          type: boolean
+          default: true
+
+    UpdateDoctorRequest:
+      type: object
+      properties:
+        specialty:
+          type: string
+          example: Interventional Cardiology
+        department:
+          type: string
+          example: Cardiovascular Center
+        phone:
+          type: string
+          example: +1-555-0198
+        isAvailable:
+          type: boolean
+          example: false
+
+    DoctorDetailResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Doctor retrieved successfully
+        data:
+          type: object
+          properties:
+            _id:
+              type: string
+              example: 6512bd8f12a3456789abcdef
+            userId:
+              type: object
+              properties:
+                _id:
+                  type: string
+                name:
+                  type: string
+                  example: Dr. Jane Doe
+                email:
+                  type: string
+                  example: jane.doe@hospital.org
+                role:
+                  type: string
+                  example: doctor
+            specialty:
+              type: string
+              example: Cardiology
+            department:
+              type: string
+              example: Cardiovascular Clinic
+            phone:
+              type: string
+              example: +1-555-0199
+            isAvailable:
+              type: boolean
+              example: true
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+
+    DoctorListResponse:
+      type: object
+      required: [success, message, data, meta]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Doctors retrieved successfully
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/DoctorDetailResponse/properties/data'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    CreatePatientRequest:
+      type: object
+      required: [userId, age, gender]
+      properties:
+        userId:
+          type: string
+          example: 6512bd8f12a3456789abcde3
+        doctorId:
+          type: string
+          example: 6512bd8f12a3456789abcdef
+        age:
+          type: integer
+          example: 45
+        gender:
+          type: string
+          enum: [male, female, other]
+          example: male
+        bloodGroup:
+          type: string
+          example: O+
+        medicalHistory:
+          type: array
+          items:
+            type: string
+          example: [Hypertension, Type 2 Diabetes]
+
+    UpdatePatientRequest:
+      type: object
+      properties:
+        doctorId:
+          type: string
+          example: 6512bd8f12a3456789abcdef
+        age:
+          type: integer
+          example: 46
+        gender:
+          type: string
+          enum: [male, female, other]
+        bloodGroup:
+          type: string
+          example: O+
+        medicalHistory:
+          type: array
+          items:
+            type: string
+
+    PatientDetailResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Patient retrieved successfully
+        data:
+          type: object
+          properties:
+            _id:
+              type: string
+              example: 6512bd8f12a3456789abcde0
+            userId:
+              type: object
+              properties:
+                _id:
+                  type: string
+                name:
+                  type: string
+                  example: Robert Taylor
+                email:
+                  type: string
+                  example: robert.taylor@example.com
+            doctorId:
+              type: object
+              properties:
+                _id:
+                  type: string
+                specialty:
+                  type: string
+                  example: Cardiology
+            age:
+              type: integer
+              example: 45
+            gender:
+              type: string
+              example: male
+            bloodGroup:
+              type: string
+              example: O+
+            medicalHistory:
+              type: array
+              items:
+                type: string
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+
+    PatientListResponse:
+      type: object
+      required: [success, message, data, meta]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Patients retrieved successfully
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/PatientDetailResponse/properties/data'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    DashboardStatsResponse:
+      type: object
+      required: [success, message, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: Dashboard stats retrieved successfully
+        data:
+          type: object
+          properties:
+            overview:
+              type: object
+              properties:
+                totalDoctors:
+                  type: integer
+                  example: 12
+                totalPatients:
+                  type: integer
+                  example: 65
+                totalUsers:
+                  type: integer
+                  example: 80
+            specialtyDistribution:
+              type: array
+              items:
+                type: object
+                properties:
+                  specialty:
+                    type: string
+                    example: Cardiology
+                  count:
+                    type: integer
+                    example: 4
+            genderDistribution:
+              type: array
+              items:
+                type: object
+                properties:
+                  gender:
+                    type: string
+                    example: female
+                  count:
+                    type: integer
+                    example: 35
+
+    ErrorResponse:
+      type: object
+      required: [success, message, errors]
+      properties:
+        success:
+          type: boolean
+          example: false
+        message:
+          type: string
+          example: Resource not found
+        errors:
+          type: array
+          items:
+            type: string
+
+  responses:
+    ValidationError:
+      description: Input validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            message: Input validation failed
+            errors:
+              - path: email
+                message: Invalid email address
+
+    UnauthorizedError:
+      description: Authentication required or token invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            message: Authentication required
+            errors: []
+
+    ForbiddenError:
+      description: Forbidden - Insufficient role permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            message: 'Forbidden: Access denied'
+            errors: []
+
+    NotFoundError:
+      description: Requested entity does not exist
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            message: Doctor not found
+            errors: []
+
+    ConflictError:
+      description: Conflict - Unique constraint violated
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            message: A user with this email already exists
+            errors: []

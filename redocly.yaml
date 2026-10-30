@@ -1,0 +1,9 @@
+apis:
+  main:
+    root: openapi/openapi.yaml
+
+rules:
+  operation-operationId-unique: error
+  operation-parameters-unique: error
+  path-parameters-defined: error
+  no-unresolved-refs: error

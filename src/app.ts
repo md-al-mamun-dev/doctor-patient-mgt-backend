@@ -3,6 +3,7 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { config } from './config/index.js';
 import { routes } from './routes/index.js';
+import { docsRoutes } from './routes/docsRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { sendSuccess } from './utils/response.js';
 
@@ -18,6 +19,9 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
+// API Documentation (Redoc UI & OpenAPI specification)
+app.use(docsRoutes);
 
 // Health Check
 app.get('/health', (_req, res) => {
