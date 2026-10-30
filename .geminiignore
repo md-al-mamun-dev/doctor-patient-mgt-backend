@@ -1,0 +1,15 @@
+# Exclude generated output, dependencies and secrets from supported Gemini CLI tools.
+# This is NOT a substitute for .gitignore, secret scanning, or filesystem permissions.
+node_modules/
+dist/
+coverage/
+.git/
+.env
+.env.*
+!.env.example
+*.log
+*.pem
+*.key
+*.p12
+*.pfx
+.cache/
