@@ -502,53 +502,138 @@ paths:
         '404':
           $ref: '#/components/responses/NotFoundError'
 
-  /doctors:
+  /doctors/options:
     get:
       tags: [Doctors]
-      operationId: listDoctors
-      summary: List doctors
-      description: Retrieves paginated doctor records with optional specialty and department filters.
+      operationId: getDoctorOptions
+      summary: Up to 20 doctor options for dropdown pickers
+      description: Returns lightweight doctor options (id, name, specialization) matching prefix search q.
       parameters:
-        - name: page
+        - name: q
           in: query
-          description: Page number
-          schema:
-            type: integer
-            default: 1
-        - name: limit
-          in: query
-          description: Number of items per page
-          schema:
-            type: integer
-            default: 10
-        - name: specialty
-          in: query
-          description: Filter by specialty regex
-          schema:
-            type: string
-        - name: department
-          in: query
-          description: Filter by department regex
+          description: Search doctor by name or specialization prefix
           schema:
             type: string
       responses:
         '200':
+          description: List of doctor options
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DoctorOption'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /doctors/facets:
+    get:
+      tags: [Doctors]
+      operationId: getDoctorFacets
+      summary: Unique specializations and hospitals
+      description: Returns sorted distinct specializations and hospitals currently in use for filter menus.
+      responses:
+        '200':
+          description: Facet lists retrieved successfully
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DoctorFacetsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /doctors:
+    get:
+      tags: [Doctors]
+      operationId: listDoctors
+      summary: List doctors with patient counts
+      description: Retrieves paginated doctor records with search and filters by specialization, hospital, and creation date.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+        - name: q
+          in: query
+          description: Search prefix against doctor name, specialization, hospital, or phone
+          schema:
+            type: string
+        - name: specialization
+          in: query
+          description: Filter by specialization (supports comma-separated list)
+          schema:
+            type: string
+        - name: hospital
+          in: query
+          description: Filter by hospital (supports comma-separated list)
+          schema:
+            type: string
+        - name: from
+          in: query
+          description: Created after calendar date (YYYY-MM-DD)
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+        - name: to
+          in: query
+          description: Created before calendar date (YYYY-MM-DD)
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [-createdAt, createdAt, name, -name, -patientCount]
+            default: -createdAt
+      responses:
+        '200':
           description: Doctors retrieved successfully
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DoctorListResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
 
     post:
       tags: [Doctors]
       operationId: createDoctor
-      summary: Create a doctor profile
-      description: Creates a doctor profile linked to an existing User entity. Requires Admin privileges.
-      security:
-        - cookieAuth: []
-        - bearerAuth: []
+      summary: Add a new doctor
+      description: Registers a new doctor with initial patientCount of 0. Requires Admin privileges.
       requestBody:
         required: true
         content:
@@ -558,18 +643,29 @@ paths:
       responses:
         '201':
           description: Doctor created successfully
+          headers:
+            Location:
+              schema:
+                type: string
+                example: /api/v1/doctors/6702e91b3c5d4fa8e1b06c33
+            ETag:
+              schema:
+                type: string
+                example: '"1"'
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DoctorDetailResponse'
+                $ref: '#/components/schemas/SingleDoctorResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '403':
           $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
         '409':
           $ref: '#/components/responses/ConflictError'
 
@@ -581,32 +677,49 @@ paths:
         description: Doctor MongoDB ObjectId
         schema:
           type: string
-          example: 6512bd8f12a3456789abcdef
+          pattern: '^[0-9a-fA-F]{24}$'
+          example: 6702e91b3c5d4fa8e1b06c33
     get:
       tags: [Doctors]
       operationId: getDoctorById
-      summary: Get doctor by ID
-      description: Retrieves detailed doctor record by ObjectId.
+      summary: One doctor profile
+      description: Retrieves doctor profile with current patientCount and version.
       responses:
         '200':
           description: Doctor retrieved successfully
+          headers:
+            ETag:
+              schema:
+                type: string
+                example: '"3"'
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DoctorDetailResponse'
+                $ref: '#/components/schemas/SingleDoctorResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
         '404':
           $ref: '#/components/responses/NotFoundError'
 
-    put:
+    patch:
       tags: [Doctors]
       operationId: updateDoctor
-      summary: Update doctor profile
-      description: Modifies doctor fields. Allowed for Admin or Doctor self-update.
-      security:
-        - cookieAuth: []
-        - bearerAuth: []
+      summary: Edit doctor profile
+      description: Updates doctor details. When doctor is renamed, all associated patients are updated in the same transaction. Optimistic concurrency control via If-Match required. Admin only.
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          description: Current version enclosed in quotes (e.g. "3")
+          schema:
+            type: string
+            example: '"3"'
       requestBody:
         required: true
         content:
@@ -616,10 +729,19 @@ paths:
       responses:
         '200':
           description: Doctor updated successfully
+          headers:
+            ETag:
+              schema:
+                type: string
+                example: '"4"'
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/DoctorDetailResponse'
+                $ref: '#/components/schemas/SingleDoctorResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -628,22 +750,148 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
         '404':
           $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '412':
+          $ref: '#/components/responses/PreconditionFailedError'
+        '428':
+          $ref: '#/components/responses/PreconditionRequiredError'
 
-    delete:
+  /doctors/{id}/summary:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Doctor MongoDB ObjectId
+        schema:
+          type: string
+          pattern: '^[0-9a-fA-F]{24}$'
+    get:
       tags: [Doctors]
-      operationId: deleteDoctor
-      summary: Delete doctor
-      description: Deletes doctor profile. Requires Admin privileges.
-      security:
-        - cookieAuth: []
-        - bearerAuth: []
+      operationId: getDoctorSummary
+      summary: Doctor profile summary counts
+      description: Computes total patientCount, breakdown by clinical condition, admitted this month count, and last admission date.
       responses:
         '200':
-          description: Doctor deleted successfully
+          description: Summary computed successfully
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StandardResponse'
+                $ref: '#/components/schemas/DoctorSummaryResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /doctors/{id}/patients:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: Doctor MongoDB ObjectId
+        schema:
+          type: string
+          pattern: '^[0-9a-fA-F]{24}$'
+    get:
+      tags: [Doctors]
+      operationId: getDoctorPatients
+      summary: List patients of a doctor
+      description: Returns paginated patients admitted under this doctor with condition and date filters.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: condition
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [-admissionDate, admissionDate, name]
+            default: -admissionDate
+      responses:
+        '200':
+          description: Doctor patients retrieved successfully
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PatientListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    post:
+      tags: [Doctors]
+      operationId: createDoctorPatient
+      summary: Add patient under doctor
+      description: Creates a patient assigned to this doctor and increments the doctor patientCount in an atomic multi-document transaction. Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePatientRequest'
+      responses:
+        '201':
+          description: Patient created successfully
+          headers:
+            Location:
+              schema:
+                type: string
+                example: /api/v1/patients/6721b0c4e1f2a39d8c4b7e10
+            ETag:
+              schema:
+                type: string
+                example: '"1"'
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SinglePatientResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '403':
@@ -656,74 +904,63 @@ paths:
       tags: [Patients]
       operationId: listPatients
       summary: List patients
-      description: Retrieves paginated patient records with optional filters. Requires Admin or Doctor privileges.
-      security:
-        - cookieAuth: []
-        - bearerAuth: []
+      description: Retrieves paginated patient records across doctors with optional filters. Internal notes are omitted from list queries.
       parameters:
         - name: page
           in: query
           schema:
             type: integer
             default: 1
+            minimum: 1
         - name: limit
           in: query
           schema:
             type: integer
             default: 10
+            minimum: 1
+            maximum: 100
         - name: doctorId
           in: query
-          description: Filter patients by assigned Doctor ObjectId
           schema:
             type: string
-        - name: gender
+        - name: condition
           in: query
           schema:
             type: string
-            enum: [male, female, other]
+        - name: q
+          in: query
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [-admissionDate, admissionDate, name]
+            default: -admissionDate
       responses:
         '200':
           description: Patients retrieved successfully
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/PatientListResponse'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-
-    post:
-      tags: [Patients]
-      operationId: createPatient
-      summary: Create patient record
-      description: Registers a new patient record. Requires Admin or Doctor privileges.
-      security:
-        - cookieAuth: []
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreatePatientRequest'
-      responses:
-        '201':
-          description: Patient created successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PatientDetailResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '409':
-          $ref: '#/components/responses/ConflictError'
 
   /patients/{id}:
     parameters:
@@ -733,35 +970,49 @@ paths:
         description: Patient MongoDB ObjectId
         schema:
           type: string
-          example: 6512bd8f12a3456789abcde0
+          pattern: '^[0-9a-fA-F]{24}$'
+          example: 6721b0c4e1f2a39d8c4b7e10
     get:
       tags: [Patients]
       operationId: getPatientById
-      summary: Get patient by ID
-      description: Retrieves a single patient by ID.
-      security:
-        - cookieAuth: []
-        - bearerAuth: []
+      summary: One patient record
+      description: Retrieves complete patient profile including clinical notes and assigned doctor name.
       responses:
         '200':
           description: Patient retrieved successfully
+          headers:
+            ETag:
+              schema:
+                type: string
+                example: '"1"'
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PatientDetailResponse'
+                $ref: '#/components/schemas/SinglePatientResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '404':
           $ref: '#/components/responses/NotFoundError'
 
-    put:
+    patch:
       tags: [Patients]
       operationId: updatePatient
-      summary: Update patient record
-      description: Modifies patient demographic, doctor assignment, or medical history.
-      security:
-        - cookieAuth: []
-        - bearerAuth: []
+      summary: Edit patient record
+      description: Modifies patient fields. If doctorId changes, patient counts of both doctors are atomically updated in a transaction. Optimistic concurrency control via If-Match required. Admin only.
+      parameters:
+        - name: If-Match
+          in: header
+          required: true
+          description: Current version enclosed in quotes (e.g. "1")
+          schema:
+            type: string
+            example: '"1"'
       requestBody:
         required: true
         content:
@@ -771,10 +1022,19 @@ paths:
       responses:
         '200':
           description: Patient updated successfully
+          headers:
+            ETag:
+              schema:
+                type: string
+                example: '"2"'
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PatientDetailResponse'
+                $ref: '#/components/schemas/SinglePatientResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
@@ -783,22 +1043,21 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
         '404':
           $ref: '#/components/responses/NotFoundError'
+        '412':
+          $ref: '#/components/responses/PreconditionFailedError'
+        '428':
+          $ref: '#/components/responses/PreconditionRequiredError'
 
     delete:
       tags: [Patients]
       operationId: deletePatient
-      summary: Delete patient record
-      description: Removes patient record. Requires Admin privileges.
-      security:
-        - cookieAuth: []
-        - bearerAuth: []
+      summary: Remove patient record
+      description: Deletes patient record and decrements the assigned doctor patientCount in an atomic transaction. Admin only.
       responses:
-        '200':
-          description: Patient deleted successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StandardResponse'
+        '204':
+          description: Patient removed successfully
+        '400':
+          $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
         '403':
@@ -1121,224 +1380,360 @@ components:
               type: string
               example: admin@hospital.org
 
-    CreateDoctorRequest:
+    Doctor:
       type: object
-      required: [userId, specialty, department]
+      required: [id, name, specialization, hospital, phone, email, patientCount, version]
       properties:
-        userId:
+        id:
           type: string
-          description: 24-character hex MongoDB ObjectId of associated User
-          example: 6512bd8f12a3456789abcde2
-        specialty:
+          example: 6702e91b3c5d4fa8e1b06c33
+        name:
+          type: string
+          example: Dr. Farhana Rahman
+        specialization:
           type: string
           example: Cardiology
-        department:
+        hospital:
           type: string
-          example: Cardiovascular Clinic
+          example: Square Hospital
         phone:
           type: string
-          example: +1-555-0199
-        isAvailable:
+          example: '+8801712345678'
+        email:
+          type: string
+          format: email
+          example: farhana.rahman@square.example
+        patientCount:
+          type: integer
+          example: 74
+        version:
+          type: integer
+          example: 3
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-01-18T04:20:00.000Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-10-12T09:41:07.000Z'
+
+    DoctorOption:
+      type: object
+      required: [id, name, specialization]
+      properties:
+        id:
+          type: string
+          example: 6702e91b3c5d4fa8e1b06c33
+        name:
+          type: string
+          example: Dr. Farhana Rahman
+        specialization:
+          type: string
+          example: Cardiology
+
+    DoctorFacetsResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
           type: boolean
-          default: true
+          example: true
+        data:
+          type: object
+          required: [specializations, hospitals]
+          properties:
+            specializations:
+              type: array
+              items:
+                type: string
+              example: [Cardiology, Dermatology, Neurology, Pediatrics]
+            hospitals:
+              type: array
+              items:
+                type: string
+              example: [Dhaka Medical College, Square Hospital, United Hospital]
+
+    DoctorSummaryResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          required: [patientCount, byCondition, admittedThisMonth, lastAdmissionDate]
+          properties:
+            patientCount:
+              type: integer
+              example: 74
+            byCondition:
+              type: object
+              properties:
+                stable:
+                  type: integer
+                  example: 31
+                under_observation:
+                  type: integer
+                  example: 14
+                critical:
+                  type: integer
+                  example: 3
+                recovering:
+                  type: integer
+                  example: 15
+                discharged:
+                  type: integer
+                  example: 11
+            admittedThisMonth:
+              type: integer
+              example: 9
+            lastAdmissionDate:
+              type: string
+              nullable: true
+              example: '2026-10-29'
+
+    CreateDoctorRequest:
+      type: object
+      required: [name, specialization, hospital, phone, email]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: Dr. Farhana Rahman
+        specialization:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: Cardiology
+        hospital:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: Square Hospital
+        phone:
+          type: string
+          example: '01712345678'
+        email:
+          type: string
+          format: email
+          example: farhana.rahman@square.example
 
     UpdateDoctorRequest:
       type: object
       properties:
-        specialty:
+        name:
           type: string
+          minLength: 2
+          maxLength: 100
+          example: Prof. Dr. Farhana Rahman
+        specialization:
+          type: string
+          minLength: 2
+          maxLength: 100
           example: Interventional Cardiology
-        department:
+        hospital:
           type: string
-          example: Cardiovascular Center
+          minLength: 2
+          maxLength: 100
+          example: Square Hospital
         phone:
           type: string
-          example: +1-555-0198
-        isAvailable:
-          type: boolean
-          example: false
+          example: '+8801712345678'
+        email:
+          type: string
+          format: email
+          example: farhana.rahman@square.example
 
-    DoctorDetailResponse:
+    SingleDoctorResponse:
       type: object
-      required: [success, message, data]
+      required: [success, data]
       properties:
         success:
           type: boolean
           example: true
-        message:
-          type: string
-          example: Doctor retrieved successfully
         data:
-          type: object
-          properties:
-            _id:
-              type: string
-              example: 6512bd8f12a3456789abcdef
-            userId:
-              type: object
-              properties:
-                _id:
-                  type: string
-                name:
-                  type: string
-                  example: Dr. Jane Doe
-                email:
-                  type: string
-                  example: jane.doe@hospital.org
-                role:
-                  type: string
-                  example: doctor
-            specialty:
-              type: string
-              example: Cardiology
-            department:
-              type: string
-              example: Cardiovascular Clinic
-            phone:
-              type: string
-              example: +1-555-0199
-            isAvailable:
-              type: boolean
-              example: true
-            createdAt:
-              type: string
-              format: date-time
-            updatedAt:
-              type: string
-              format: date-time
+          $ref: '#/components/schemas/Doctor'
 
     DoctorListResponse:
       type: object
-      required: [success, message, data, meta]
+      required: [success, data, meta]
       properties:
         success:
           type: boolean
           example: true
-        message:
-          type: string
-          example: Doctors retrieved successfully
         data:
           type: array
           items:
-            $ref: '#/components/schemas/DoctorDetailResponse/properties/data'
+            $ref: '#/components/schemas/Doctor'
         meta:
           $ref: '#/components/schemas/PaginationMeta'
 
-    CreatePatientRequest:
+    Patient:
       type: object
-      required: [userId, age, gender]
+      required: [id, name, age, gender, phone, condition, admissionDate, doctorId, doctorName, version]
       properties:
-        userId:
+        id:
           type: string
-          example: 6512bd8f12a3456789abcde3
-        doctorId:
+          example: 6721b0c4e1f2a39d8c4b7e10
+        name:
           type: string
-          example: 6512bd8f12a3456789abcdef
+          example: Tariq Anwar
         age:
           type: integer
-          example: 45
+          example: 48
         gender:
           type: string
           enum: [male, female, other]
           example: male
-        bloodGroup:
+        phone:
           type: string
-          example: O+
-        medicalHistory:
-          type: array
-          items:
-            type: string
-          example: [Hypertension, Type 2 Diabetes]
+          example: '+8801819998877'
+        email:
+          type: string
+          format: email
+          example: tariq.anwar@example.com
+        condition:
+          type: string
+          enum: [stable, under_observation, critical, recovering, discharged]
+          example: stable
+        diagnosis:
+          type: string
+          example: Hypertension Stage 2
+        admissionDate:
+          type: string
+          example: '2026-10-25'
+        notes:
+          type: string
+          example: Patient responding well to medication.
+        doctorId:
+          type: string
+          example: 6702e91b3c5d4fa8e1b06c33
+        doctorName:
+          type: string
+          example: Dr. Farhana Rahman
+        version:
+          type: integer
+          example: 1
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-10-25T08:30:00.000Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-10-25T08:30:00.000Z'
+
+    CreatePatientRequest:
+      type: object
+      required: [name, age, gender, phone, condition, admissionDate]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: Tariq Anwar
+        age:
+          type: integer
+          minimum: 0
+          maximum: 130
+          example: 48
+        gender:
+          type: string
+          enum: [male, female, other]
+          example: male
+        phone:
+          type: string
+          example: '01819998877'
+        email:
+          type: string
+          format: email
+          example: tariq.anwar@example.com
+        condition:
+          type: string
+          enum: [stable, under_observation, critical, recovering, discharged]
+          example: stable
+        diagnosis:
+          type: string
+          maxLength: 200
+          example: Hypertension Stage 2
+        admissionDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: '2026-10-25'
+        notes:
+          type: string
+          maxLength: 2000
+          example: Patient responding well to medication.
 
     UpdatePatientRequest:
       type: object
       properties:
-        doctorId:
+        name:
           type: string
-          example: 6512bd8f12a3456789abcdef
+          minLength: 2
+          maxLength: 100
+          example: Tariq Anwar
         age:
           type: integer
-          example: 46
+          minimum: 0
+          maximum: 130
+          example: 49
         gender:
           type: string
           enum: [male, female, other]
-        bloodGroup:
+          example: male
+        phone:
           type: string
-          example: O+
-        medicalHistory:
-          type: array
-          items:
-            type: string
+          example: '+8801819998877'
+        email:
+          type: string
+          format: email
+          example: tariq.anwar@example.com
+        condition:
+          type: string
+          enum: [stable, under_observation, critical, recovering, discharged]
+          example: recovering
+        diagnosis:
+          type: string
+          maxLength: 200
+          example: Hypertension Controlled
+        admissionDate:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          example: '2026-10-25'
+        notes:
+          type: string
+          maxLength: 2000
+          example: Scheduled for discharge tomorrow.
+        doctorId:
+          type: string
+          pattern: '^[0-9a-fA-F]{24}$'
+          example: 6702e91b3c5d4fa8e1b06c33
 
-    PatientDetailResponse:
+    SinglePatientResponse:
       type: object
-      required: [success, message, data]
+      required: [success, data]
       properties:
         success:
           type: boolean
           example: true
-        message:
-          type: string
-          example: Patient retrieved successfully
         data:
-          type: object
-          properties:
-            _id:
-              type: string
-              example: 6512bd8f12a3456789abcde0
-            userId:
-              type: object
-              properties:
-                _id:
-                  type: string
-                name:
-                  type: string
-                  example: Robert Taylor
-                email:
-                  type: string
-                  example: robert.taylor@example.com
-            doctorId:
-              type: object
-              properties:
-                _id:
-                  type: string
-                specialty:
-                  type: string
-                  example: Cardiology
-            age:
-              type: integer
-              example: 45
-            gender:
-              type: string
-              example: male
-            bloodGroup:
-              type: string
-              example: O+
-            medicalHistory:
-              type: array
-              items:
-                type: string
-            createdAt:
-              type: string
-              format: date-time
-            updatedAt:
-              type: string
-              format: date-time
+          $ref: '#/components/schemas/Patient'
 
     PatientListResponse:
       type: object
-      required: [success, message, data, meta]
+      required: [success, data, meta]
       properties:
         success:
           type: boolean
           example: true
-        message:
-          type: string
-          example: Patients retrieved successfully
         data:
           type: array
           items:
-            $ref: '#/components/schemas/PatientDetailResponse/properties/data'
+            $ref: '#/components/schemas/Patient'
         meta:
           $ref: '#/components/schemas/PaginationMeta'
 
