@@ -20,6 +20,10 @@ tags:
     description: Patient registry, medical records, and doctor assignments
   - name: Dashboard
     description: Aggregate clinical metrics and distribution statistics
+  - name: Audit Logs
+    description: Immutable audit trail of administrative and clinical mutations (Admin only)
+  - name: Health
+    description: System and database connectivity health probe
 
 paths:
   /auth/register:
@@ -1065,15 +1069,147 @@ paths:
         '404':
           $ref: '#/components/responses/NotFoundError'
 
+  /dashboard/summary:
+    get:
+      tags: [Dashboard]
+      operationId: getDashboardSummary
+      summary: Headline numbers for date range compared with previous period
+      description: Returns headline figures comparing new patient admissions and condition metrics across current and previous duration. Cached for 60 seconds.
+      parameters:
+        - name: from
+          in: query
+          description: Start calendar date (YYYY-MM-DD). Default is 29 days before to.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+        - name: to
+          in: query
+          description: End calendar date (YYYY-MM-DD). Default is today in Asia/Dhaka time.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+      responses:
+        '200':
+          description: Dashboard headline numbers retrieved successfully
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: private, max-age=60
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardSummaryResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /dashboard/admissions:
+    get:
+      tags: [Dashboard]
+      operationId: getDashboardAdmissions
+      summary: Admissions per day, week or month
+      description: Returns admission counts bucketed across the requested period and compared with the previous period. Empty days are zero, never omitted. Cached for 60 seconds.
+      parameters:
+        - name: from
+          in: query
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+        - name: to
+          in: query
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+        - name: interval
+          in: query
+          schema:
+            type: string
+            enum: [day, week, month]
+      responses:
+        '200':
+          description: Admissions timeline retrieved successfully
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: private, max-age=60
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardAdmissionsResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /dashboard/patients-per-doctor:
+    get:
+      tags: [Dashboard]
+      operationId: getDashboardPatientsPerDoctor
+      summary: Doctors with the most patients
+      description: Returns top doctors ordered by current patient count using the indexed patientCount field. Cached for 60 seconds.
+      parameters:
+        - name: limit
+          in: query
+          description: Number of doctors to return (1 to 50)
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 50
+      responses:
+        '200':
+          description: Top doctors list retrieved successfully
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: private, max-age=60
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/DoctorPatientCountItem'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  /dashboard/breakdown:
+    get:
+      tags: [Dashboard]
+      operationId: getDashboardBreakdown
+      summary: Condition breakdown and specialization distribution
+      description: Returns clinical condition distribution across all patients and doctor/patient loads grouped by specialization. Cached for 60 seconds.
+      responses:
+        '200':
+          description: Clinical breakdown retrieved successfully
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: private, max-age=60
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardBreakdownResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
   /dashboard/stats:
     get:
       tags: [Dashboard]
       operationId: getDashboardStats
-      summary: Retrieve clinical dashboard analytics
+      summary: Retrieve clinical dashboard analytics (Legacy)
       description: Returns aggregate counts of doctors, patients, and users, alongside specialty and gender distribution breakdowns.
-      security:
-        - cookieAuth: []
-        - bearerAuth: []
       responses:
         '200':
           description: Dashboard stats retrieved successfully
@@ -1083,6 +1219,97 @@ paths:
                 $ref: '#/components/schemas/DashboardStatsResponse'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+
+  /audit-logs:
+    get:
+      tags: [Audit Logs]
+      operationId: listAuditLogs
+      summary: Immutable audit trail
+      description: Returns paginated log of administrative and clinical mutations, newest first. Kept for 365 days. Admin only.
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+        - name: actorId
+          in: query
+          description: User ID who performed the action
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+        - name: action
+          in: query
+          description: Audit event name (e.g. user.create, patient.update)
+          schema:
+            type: string
+        - name: entityType
+          in: query
+          description: Target resource (user, doctor, patient)
+          schema:
+            type: string
+        - name: entityId
+          in: query
+          description: Target resource ObjectId
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+        - name: from
+          in: query
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+        - name: to
+          in: query
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+      responses:
+        '200':
+          description: Audit logs retrieved successfully
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditLogListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /health:
+    get:
+      tags: [Health]
+      operationId: getHealthStatus
+      summary: Service and database health check
+      description: Probes MongoDB connection and ping latency. Returns 200 when operational, or 503 Service Unavailable when the database is unreachable.
+      responses:
+        '200':
+          description: System and database are operational
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Database is unreachable or down
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
 
 components:
   securitySchemes:
@@ -1784,6 +2011,231 @@ components:
                   count:
                     type: integer
                     example: 35
+
+    DashboardSummaryResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          required: [range, previousRange, totalDoctors, totalPatients, newPatients, newPatientsPrevPeriod, avgPatientsPerDoctor, criticalPatients, dischargedPatients]
+          properties:
+            range:
+              type: object
+              required: [from, to]
+              properties:
+                from:
+                  type: string
+                  example: '2026-10-01'
+                to:
+                  type: string
+                  example: '2026-10-30'
+            previousRange:
+              type: object
+              required: [from, to]
+              properties:
+                from:
+                  type: string
+                  example: '2026-09-01'
+                to:
+                  type: string
+                  example: '2026-09-30'
+            totalDoctors:
+              type: integer
+              example: 60
+            totalPatients:
+              type: integer
+              example: 3042
+            newPatients:
+              type: integer
+              example: 284
+            newPatientsPrevPeriod:
+              type: integer
+              example: 253
+            changePct:
+              type: number
+              example: 12.3
+            avgPatientsPerDoctor:
+              type: number
+              example: 50.7
+            criticalPatients:
+              type: integer
+              example: 37
+            dischargedPatients:
+              type: integer
+              example: 541
+
+    DashboardAdmissionsResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          required: [interval, current, previous]
+          properties:
+            interval:
+              type: string
+              enum: [day, week, month]
+              example: day
+            current:
+              type: array
+              items:
+                type: object
+                required: [date, count]
+                properties:
+                  date:
+                    type: string
+                    example: '2026-10-01'
+                  count:
+                    type: integer
+                    example: 9
+            previous:
+              type: array
+              items:
+                type: object
+                required: [date, count]
+                properties:
+                  date:
+                    type: string
+                    example: '2026-09-01'
+                  count:
+                    type: integer
+                    example: 7
+
+    DoctorPatientCountItem:
+      type: object
+      required: [doctorId, name, specialization, count]
+      properties:
+        doctorId:
+          type: string
+          example: 6702e91b3c5d4fa8e1b06c33
+        name:
+          type: string
+          example: Dr. Farhana Rahman
+        specialization:
+          type: string
+          example: Cardiology
+        count:
+          type: integer
+          example: 74
+
+    DashboardBreakdownResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          required: [byCondition, bySpecialization]
+          properties:
+            byCondition:
+              type: array
+              items:
+                type: object
+                required: [condition, count]
+                properties:
+                  condition:
+                    type: string
+                    example: stable
+                  count:
+                    type: integer
+                    example: 31
+            bySpecialization:
+              type: array
+              items:
+                type: object
+                required: [specialization, doctors, patients]
+                properties:
+                  specialization:
+                    type: string
+                    example: Cardiology
+                  doctors:
+                    type: integer
+                    example: 12
+                  patients:
+                    type: integer
+                    example: 650
+
+    AuditLogEntry:
+      type: object
+      required: [id, at, action]
+      properties:
+        id:
+          type: string
+          example: 6722d9f0b4a16c3e8f2d1a75
+        at:
+          type: string
+          format: date-time
+          example: '2026-10-30T05:20:11.402Z'
+        actor:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+              example: 671f0a2be4c1d9a07b3e5f21
+            name:
+              type: string
+              example: Nadia Islam
+        action:
+          type: string
+          example: patient.update
+        entityType:
+          type: string
+          nullable: true
+          example: patient
+        entityId:
+          type: string
+          nullable: true
+          example: 6721b0c4e1f2a39d8c4b7e10
+        fields:
+          type: array
+          items:
+            type: string
+          example: [condition, diagnosis]
+        ip:
+          type: string
+          nullable: true
+          example: 203.0.113.24
+        userAgent:
+          type: string
+          nullable: true
+
+    AuditLogListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditLogEntry'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    HealthResponse:
+      type: object
+      required: [status, db, version]
+      properties:
+        status:
+          type: string
+          example: ok
+        db:
+          type: string
+          example: up
+        version:
+          type: string
+          example: 1.4.0
 
     ErrorResponse:
       type: object
