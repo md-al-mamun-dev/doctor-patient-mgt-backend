@@ -12,6 +12,8 @@ servers:
 tags:
   - name: Auth
     description: Authentication, session management, and current user profile
+  - name: Users
+    description: User and staff account administration, role assignment, and session control (Admin only)
   - name: Doctors
     description: Doctor registry, specialty filters, and profile operations
   - name: Patients
@@ -78,26 +80,69 @@ paths:
         '401':
           $ref: '#/components/responses/UnauthorizedError'
 
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      operationId: refreshSession
+      summary: Rotate refresh token session
+      description: Swaps the single-use refresh token for a new one and issues a refreshed access token. Token reuse immediately terminates the entire session family.
+      responses:
+        '200':
+          description: Session refreshed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    required: [session]
+                    properties:
+                      session:
+                        $ref: '#/components/schemas/SessionInfo'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitedError'
+
   /auth/logout:
     post:
       tags: [Auth]
       operationId: logoutUser
       summary: User logout
-      description: Clears the authentication cookie.
+      description: Ends the current session family, clears cookies, and signals client storage cleanup.
       responses:
-        '200':
-          description: Logged out successfully
-          content:
-            application/json:
+        '204':
+          description: Logged out successfully. Cookies cleared.
+          headers:
+            Clear-Site-Data:
               schema:
-                $ref: '#/components/schemas/StandardResponse'
+                type: string
+                example: '"cookies", "storage"'
+
+  /auth/logout-all:
+    post:
+      tags: [Auth]
+      operationId: logoutAllSessions
+      summary: End all sessions on all devices
+      description: Revokes all active refresh token families for the authenticated user and clears local cookies.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        '204':
+          description: All sessions revoked successfully.
 
   /auth/me:
     get:
       tags: [Auth]
       operationId: getCurrentUser
       summary: Get current authenticated user
-      description: Returns the token payload of the currently authenticated user.
+      description: Returns the authenticated user profile and active session expiration metadata. Accessible even when a password change is pending.
       security:
         - cookieAuth: []
         - bearerAuth: []
@@ -107,9 +152,355 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserProfileResponse'
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    required: [user]
+                    properties:
+                      user:
+                        $ref: '#/components/schemas/User'
+                      session:
+                        $ref: '#/components/schemas/SessionInfo'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      operationId: changePassword
+      summary: Change user password
+      description: Updates the user password with Argon2id, revokes other device sessions, and lifts first-login password change lock.
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data]
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: object
+                    required: [user]
+                    properties:
+                      user:
+                        $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '429':
+          $ref: '#/components/responses/RateLimitedError'
+
+  /users:
+    get:
+      tags: [Users]
+      operationId: listUsers
+      summary: List staff and admin accounts
+      description: Returns a paginated list of user accounts with optional filtering by role, status, and prefix search. Admin only.
+      parameters:
+        - name: page
+          in: query
+          description: Page number (1 or greater)
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          description: Number of records per page (up to 100)
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+        - name: q
+          in: query
+          description: Search by name or email prefix
+          schema:
+            type: string
+        - name: role
+          in: query
+          description: Comma-separated list of roles to filter (admin, staff)
+          schema:
+            type: string
+            example: staff
+        - name: status
+          in: query
+          description: Comma-separated list of statuses to filter (active, disabled)
+          schema:
+            type: string
+            example: active
+        - name: sort
+          in: query
+          description: Sort field (name, -createdAt, -lastLoginAt)
+          schema:
+            type: string
+            enum: [name, -createdAt, -lastLoginAt]
+            default: -createdAt
+      responses:
+        '200':
+          description: List of user accounts retrieved successfully
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+    post:
+      tags: [Users]
+      operationId: createUser
+      summary: Create an account
+      description: Creates a new staff or admin account with an automatically generated one-time temporary password. The user must change their password upon first sign-in. Admin only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User account created successfully
+          headers:
+            Location:
+              schema:
+                type: string
+                example: /api/v1/users/6722c41fa8e03b17d95c0a62
+            ETag:
+              schema:
+                type: string
+                example: '"1"'
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateUserResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+
+  /users/{id}:
+    get:
+      tags: [Users]
+      operationId: getUserById
+      summary: Get user account details
+      description: Retrieves complete details of a specific user account. Admin only.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 24-character hexadecimal MongoDB ObjectId
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+            example: 6722c41fa8e03b17d95c0a62
+      responses:
+        '200':
+          description: User account retrieved successfully
+          headers:
+            ETag:
+              schema:
+                type: string
+                example: '"1"'
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SingleUserResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    patch:
+      tags: [Users]
+      operationId: updateUser
+      summary: Edit user account
+      description: Modifies name, role, or status of an existing user account. Demoting or disabling an account immediately terminates all active sessions. Optimistic concurrency control via If-Match header is mandatory. Admin only.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 24-character hexadecimal MongoDB ObjectId
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+            example: 6722c41fa8e03b17d95c0a62
+        - name: If-Match
+          in: header
+          required: true
+          description: Current document version enclosed in quotes (e.g. "1")
+          schema:
+            type: string
+            example: '"1"'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User account updated successfully
+          headers:
+            ETag:
+              schema:
+                type: string
+                example: '"2"'
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SingleUserResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '412':
+          $ref: '#/components/responses/PreconditionFailedError'
+        '428':
+          $ref: '#/components/responses/PreconditionRequiredError'
+
+  /users/{id}/reset-password:
+    post:
+      tags: [Users]
+      operationId: resetUserPassword
+      summary: Admin password reset
+      description: Generates a new 20-character temporary password, enforces password change at next sign-in, and terminates all existing sessions for the target account. Admin only.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 24-character hexadecimal MongoDB ObjectId
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+            example: 6722c41fa8e03b17d95c0a62
+      responses:
+        '200':
+          description: Password reset successfully, temporary password returned
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetPasswordResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /users/{id}/unlock:
+    post:
+      tags: [Users]
+      operationId: unlockUserAccount
+      summary: Unlock user account
+      description: Clears failed login counter and unlocks an account locked due to excessive failed sign-in attempts. Admin only.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 24-character hexadecimal MongoDB ObjectId
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+            example: 6722c41fa8e03b17d95c0a62
+      responses:
+        '204':
+          description: Account unlocked successfully
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /users/{id}/revoke-sessions:
+    post:
+      tags: [Users]
+      operationId: revokeUserSessions
+      summary: Revoke all active sessions
+      description: Immediately invalidates all refresh tokens and sessions across all devices for the target user. Admin only.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 24-character hexadecimal MongoDB ObjectId
+          schema:
+            type: string
+            pattern: '^[0-9a-fA-F]{24}$'
+            example: 6722c41fa8e03b17d95c0a62
+      responses:
+        '204':
+          description: All user sessions revoked successfully
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
 
   /doctors:
     get:
@@ -510,6 +901,171 @@ components:
           format: password
           example: AdminPass123!
 
+    SessionInfo:
+      type: object
+      required: [startedAt, idleExpiresAt, expiresAt]
+      properties:
+        startedAt:
+          type: string
+          format: date-time
+          example: '2026-10-30T03:00:00.000Z'
+        idleExpiresAt:
+          type: string
+          format: date-time
+          example: '2026-10-30T03:30:00.000Z'
+        expiresAt:
+          type: string
+          format: date-time
+          example: '2026-10-30T11:00:00.000Z'
+
+    ChangePasswordRequest:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          type: string
+          format: password
+          example: OldPassword123!
+        newPassword:
+          type: string
+          format: password
+          minLength: 15
+          maxLength: 128
+          example: newSecurePass12345678!
+
+    User:
+      type: object
+      required: [id, name, email, role, version]
+      properties:
+        id:
+          type: string
+          example: 671f0a2be4c1d9a07b3e5f21
+        name:
+          type: string
+          example: Nadia Islam
+        email:
+          type: string
+          format: email
+          example: nadia.islam@doctortracker.dev
+        role:
+          type: string
+          enum: [admin, staff, doctor, patient]
+          example: admin
+        status:
+          type: string
+          enum: [active, disabled]
+          example: active
+        mustChangePassword:
+          type: boolean
+          example: false
+        lastLoginAt:
+          type: string
+          format: date-time
+          nullable: true
+          example: '2026-10-30T06:00:00.000Z'
+        version:
+          type: integer
+          example: 1
+        createdAt:
+          type: string
+          format: date-time
+          example: '2026-10-30T05:12:44.120Z'
+        updatedAt:
+          type: string
+          format: date-time
+          example: '2026-10-30T05:12:44.120Z'
+
+    CreateUserRequest:
+      type: object
+      required: [name, email, role]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: Rakib Hossain
+        email:
+          type: string
+          format: email
+          example: rakib.hossain@doctortracker.dev
+        role:
+          type: string
+          enum: [admin, staff]
+          example: staff
+
+    CreateUserResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          required: [user, temporaryPassword]
+          properties:
+            user:
+              $ref: '#/components/schemas/User'
+            temporaryPassword:
+              type: string
+              example: qT7v-Lm2x-Wc9k-Rp4z-Hb6n
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+          example: Rakib Hossain
+        role:
+          type: string
+          enum: [admin, staff]
+          example: staff
+        status:
+          type: string
+          enum: [active, disabled]
+          example: active
+
+    ResetPasswordResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          required: [temporaryPassword]
+          properties:
+            temporaryPassword:
+              type: string
+              example: qT7v-Lm2x-Wc9k-Rp4z-Hb6n
+
+    UserListResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+
+    SingleUserResponse:
+      type: object
+      required: [success, data]
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/User'
+
     AuthSuccessResponse:
       type: object
       required: [success, message, data]
@@ -905,4 +1461,37 @@ components:
           example:
             success: false
             message: A user with this email already exists
+            errors: []
+
+    RateLimitedError:
+      description: Too many requests
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            message: Too many requests. Please try again later.
+            errors: []
+
+    PreconditionFailedError:
+      description: Precondition failed - Resource version mismatch
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            message: 'Precondition failed: resource has been modified'
+            errors: []
+
+    PreconditionRequiredError:
+      description: Precondition required - If-Match header missing
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            message: If-Match header is required for updates
             errors: []
