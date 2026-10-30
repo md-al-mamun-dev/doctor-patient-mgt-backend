@@ -1,4 +1,5 @@
 import { Schema, model, type Document, type Types } from 'mongoose';
+import { generateSearchTokens } from '../utils/searchTokens.js';
 
 export type UserRole = 'admin' | 'staff' | 'doctor' | 'patient';
 export type UserStatus = 'active' | 'disabled';
@@ -16,6 +17,8 @@ export interface IUser extends Document {
   lockedUntil: Date | null;
   passwordChangedAt: Date;
   lastLoginAt: Date | null;
+  searchTokens: string[];
+  version: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -71,6 +74,15 @@ const userSchema = new Schema<IUser>(
       type: Date,
       default: null,
     },
+    searchTokens: {
+      type: [String],
+      default: [],
+    },
+    version: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
   },
   {
     timestamps: true,
@@ -81,6 +93,7 @@ const userSchema = new Schema<IUser>(
         delete ret._id;
         delete ret.__v;
         delete ret.passwordHash;
+        delete ret.searchTokens;
         return ret;
       },
     },
@@ -91,13 +104,32 @@ const userSchema = new Schema<IUser>(
         delete ret._id;
         delete ret.__v;
         delete ret.passwordHash;
+        delete ret.searchTokens;
         return ret;
       },
     },
   }
 );
 
-// Unique index on email
+// Pre-save hook to populate searchTokens from name and email
+userSchema.pre('save', function () {
+  if (
+    this.isModified('name') ||
+    this.isModified('email') ||
+    !this.searchTokens ||
+    this.searchTokens.length === 0
+  ) {
+    this.searchTokens = generateSearchTokens([this.name, this.email]);
+  }
+});
+
+// Indexes matching database plan and R01 Equality-Sort-Range
 userSchema.index({ email: 1 }, { unique: true });
+userSchema.index({ createdAt: -1, _id: -1 });
+userSchema.index({ role: 1, createdAt: -1, _id: -1 });
+userSchema.index({ status: 1, createdAt: -1, _id: -1 });
+userSchema.index({ name: 1, _id: 1 });
+userSchema.index({ lastLoginAt: -1, _id: -1 });
+userSchema.index({ searchTokens: 1 });
 
 export const User = model<IUser>('User', userSchema);

@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { type ZodType, ZodError } from 'zod';
-import { AppError } from '../utils/logger.js';
+import { AppError } from '../utils/errors.js';
 
 interface RequestValidationSchema {
   body?: ZodType;
@@ -15,19 +15,24 @@ export const validate = (schema: RequestValidationSchema) => {
         req.body = await schema.body.parseAsync(req.body);
       }
       if (schema.query) {
-        req.query = await schema.query.parseAsync(req.query) as any;
+        const parsed = (await schema.query.parseAsync(req.query)) as any;
+        for (const key of Object.keys(req.query)) {
+          delete (req.query as any)[key];
+        }
+        Object.assign(req.query, parsed);
       }
       if (schema.params) {
-        req.params = await schema.params.parseAsync(req.params) as any;
+        const parsed = (await schema.params.parseAsync(req.params)) as any;
+        Object.assign(req.params, parsed);
       }
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        const errors = error.issues.map((issue) => ({
+        const details = error.issues.map((issue) => ({
           path: issue.path.join('.'),
           message: issue.message,
         }));
-        next(new AppError('Input validation failed', 400, errors));
+        next(new AppError('Some fields need fixing.', 400, 'VALIDATION_ERROR', details));
       } else {
         next(error);
       }
