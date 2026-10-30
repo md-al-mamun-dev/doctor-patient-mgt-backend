@@ -1,13 +1,27 @@
 import { Router } from 'express';
 import { AuthController } from '../controllers/authController.js';
-import { validate } from '../middleware/validate.js';
 import { authenticate } from '../middleware/auth.js';
-import { registerSchema, loginSchema } from '../validators/authValidator.js';
+import { validate } from '../middleware/validate.js';
+import { loginRateLimiter, refreshRateLimiter } from '../middleware/rateLimiter.js';
+import {
+  loginSchema,
+  changePasswordSchema,
+  registerSchema,
+} from '../validators/authValidator.js';
 
 export const authRoutes = Router();
 
-authRoutes.post('/register', validate({ body: registerSchema }), AuthController.register);
-authRoutes.post('/login', validate({ body: loginSchema }), AuthController.login);
-authRoutes.post('/logout', AuthController.logout);
+authRoutes.post('/login', loginRateLimiter, validate({ body: loginSchema }), AuthController.login);
+authRoutes.post('/refresh', refreshRateLimiter, AuthController.refresh);
+authRoutes.post('/logout', authenticate, AuthController.logout);
+authRoutes.post('/logout-all', authenticate, AuthController.logoutAll);
 authRoutes.get('/me', authenticate, AuthController.getMe);
+authRoutes.post(
+  '/change-password',
+  authenticate,
+  validate({ body: changePasswordSchema }),
+  AuthController.changePassword
+);
 
+// Legacy registration endpoint for test compatibility
+authRoutes.post('/register', validate({ body: registerSchema }), AuthController.register);
