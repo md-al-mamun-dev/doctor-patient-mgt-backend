@@ -62,6 +62,7 @@ export class PatientService {
         limit,
         total,
         totalPages: Math.ceil(total / limit),
+        hasNextPage: page < Math.ceil(total / limit),
       },
     };
   }

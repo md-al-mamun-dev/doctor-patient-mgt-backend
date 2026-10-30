@@ -5,11 +5,17 @@ import { config } from './config/index.js';
 import { routes } from './routes/index.js';
 import { docsRoutes } from './routes/docsRoutes.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { requestIdMiddleware } from './middleware/requestId.js';
+import { requireOrigin, requireJson } from './middleware/requireHeaders.js';
+import { apiRateLimiter } from './middleware/rateLimiter.js';
 import { sendSuccess } from './utils/response.js';
 
 export const app: Application = express();
 
-// Global Middlewares
+// 1. Request ID Tracking
+app.use(requestIdMiddleware);
+
+// 2. Global Security & Body Parsing
 app.use(
   cors({
     origin: config.CORS_ORIGIN,
@@ -20,10 +26,14 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// API Documentation (Redoc UI & OpenAPI specification)
+// 3. State-changing request header guardrails
+app.use(requireOrigin);
+app.use(requireJson);
+
+// 4. API Documentation (Redoc UI & OpenAPI specification)
 app.use(docsRoutes);
 
-// Health Check
+// 5. Health Check
 app.get('/health', (_req, res) => {
   sendSuccess(res, {
     message: 'Backend API is running smoothly',
@@ -34,9 +44,8 @@ app.get('/health', (_req, res) => {
   });
 });
 
-// API Routes
-app.use('/api/v1', routes);
+// 6. Rate Limited API v1 Routes
+app.use('/api/v1', apiRateLimiter, routes);
 
-// Centralized Error Handler
+// 7. Centralized Error Handler
 app.use(errorHandler);
-

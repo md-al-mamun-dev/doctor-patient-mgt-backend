@@ -1,44 +1,88 @@
 import type { Request, Response, NextFunction } from 'express';
-import { AppError } from '../utils/logger.js';
-import { sendError } from '../utils/response.js';
-import { config } from '../config/index.js';
+import { ZodError } from 'zod';
+import { AppError } from '../utils/errors.js';
+import { sendError, type ErrorDetail } from '../utils/response.js';
 
 export const errorHandler = (
-  err: Error | AppError,
-  _req: Request,
+  err: any,
+  req: Request,
   res: Response,
   _next: NextFunction
 ): void => {
-  let statusCode = 500;
-  let message = 'Internal Server Error';
-  let errors: unknown[] = [];
+  const requestId = req.id || 'unknown';
 
+  // 1. Handled Application Errors
   if (err instanceof AppError) {
-    statusCode = err.statusCode;
-    message = err.message;
-    errors = err.errors || [];
-  } else if (err.name === 'ValidationError') {
-    // Mongoose validation error
-    statusCode = 400;
-    message = 'Validation Error';
-    errors = Object.values((err as any).errors || {}).map((e: any) => e.message);
-  } else if (err.name === 'CastError') {
-    // Mongoose bad ObjectId
-    statusCode = 400;
-    message = `Invalid ${(err as any).path}: ${(err as any).value}`;
-  } else if ((err as any).code === 11000) {
-    // Mongoose duplicate key
-    statusCode = 409;
-    const field = Object.keys((err as any).keyValue || {})[0];
-    message = `Duplicate value entered for ${field}`;
-  } else if (err.message) {
-    message = err.message;
+    sendError(res, {
+      statusCode: err.statusCode,
+      code: err.code,
+      message: err.message,
+      details: err.details,
+      data: err.data,
+      requestId,
+    });
+    return;
   }
 
-  if (config.NODE_ENV === 'development') {
-    console.error('⚠️ [ErrorHandler]:', err);
+  // 2. Zod Request Validation Errors
+  if (err instanceof ZodError) {
+    const details: ErrorDetail[] = err.issues.map((issue) => ({
+      path: issue.path.join('.'),
+      message: issue.message,
+    }));
+
+    sendError(res, {
+      statusCode: 400,
+      code: 'VALIDATION_ERROR',
+      message: 'Some fields need fixing.',
+      details,
+      requestId,
+    });
+    return;
   }
 
-  sendError(res, statusCode, message, errors);
+  // 3. Mongoose CastError (e.g. invalid ObjectId)
+  if (err.name === 'CastError') {
+    sendError(res, {
+      statusCode: 400,
+      code: 'VALIDATION_ERROR',
+      message: `Invalid format for field "${err.path}"`,
+      details: [{ path: err.path, message: 'Invalid ID representation' }],
+      requestId,
+    });
+    return;
+  }
+
+  // 4. Mongoose Duplicate Key Error (E11000)
+  if (err.code === 11000) {
+    const field = Object.keys(err.keyPattern || {})[0] || 'field';
+    sendError(res, {
+      statusCode: 409,
+      code: 'CONFLICT',
+      message: `A record with this ${field} already exists.`,
+      details: [{ path: field, message: `${field} must be unique` }],
+      requestId,
+    });
+    return;
+  }
+
+  // 5. JWT Authentication Errors
+  if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+    sendError(res, {
+      statusCode: 401,
+      code: 'UNAUTHORIZED',
+      message: 'Authentication session is invalid or expired.',
+      requestId,
+    });
+    return;
+  }
+
+  // 6. Generic / Uncaught Errors
+  console.error(`[INTERNAL_ERROR][${requestId}]`, err);
+  sendError(res, {
+    statusCode: 500,
+    code: 'INTERNAL_ERROR',
+    message: 'An unexpected internal error occurred.',
+    requestId,
+  });
 };
-
