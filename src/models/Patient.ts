@@ -21,6 +21,7 @@ export interface IPatient extends Document {
   searchTokens: string[];
   createdBy?: Types.ObjectId;
   updatedBy?: Types.ObjectId;
+  version: number;
   // Compatibility fields
   userId?: Types.ObjectId;
   bloodGroup?: string;
@@ -117,6 +118,11 @@ const patientSchema = new Schema<IPatient>(
       type: [String],
       default: [],
     },
+    version: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
   },
   {
     timestamps: true,
@@ -127,6 +133,11 @@ const patientSchema = new Schema<IPatient>(
         delete ret._id;
         delete ret.__v;
         delete ret.searchTokens; // Exclude internal search index tokens from API responses
+        if (ret.admissionDate instanceof Date) {
+          ret.admissionDate = ret.admissionDate.toISOString().split('T')[0];
+        } else if (typeof ret.admissionDate === 'string' && ret.admissionDate.includes('T')) {
+          ret.admissionDate = ret.admissionDate.split('T')[0];
+        }
         return ret;
       },
     },

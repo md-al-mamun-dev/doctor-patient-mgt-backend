@@ -12,6 +12,7 @@ export interface IDoctor extends Document {
   patientCount: number;
   searchTokens: string[];
   createdBy?: Types.ObjectId;
+  version: number;
   // Compatibility fields
   specialty: string;
   department: string;
@@ -59,6 +60,11 @@ const doctorSchema = new Schema<IDoctor>(
       type: Number,
       default: 0,
       min: 0,
+    },
+    version: {
+      type: Number,
+      default: 1,
+      min: 1,
     },
     searchTokens: {
       type: [String],
