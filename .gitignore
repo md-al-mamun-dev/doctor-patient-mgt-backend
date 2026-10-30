@@ -20,6 +20,8 @@ pnpm-debug.log*
 
 # Testing coverage
 coverage/
+__pycache__/
+*.pyc
 
 # OS and Editor metadata
 .DS_Store

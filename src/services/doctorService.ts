@@ -27,15 +27,18 @@ export class DoctorService {
 
     const filter: Record<string, unknown> = {};
     if (query.specialty) {
-      filter.specialty = { $regex: query.specialty, $options: 'i' };
+      const escapedSpecialty = query.specialty.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.specialty = { $regex: escapedSpecialty, $options: 'i' };
     }
     if (query.department) {
-      filter.department = { $regex: query.department, $options: 'i' };
+      const escapedDepartment = query.department.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.department = { $regex: escapedDepartment, $options: 'i' };
     }
 
     const [doctors, total] = await Promise.all([
       Doctor.find(filter)
         .populate('userId', 'name email role')
+        .sort({ createdAt: -1, _id: -1 })
         .skip(skip)
         .limit(limit)
         .lean(),
