@@ -1,73 +1,78 @@
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response } from 'express';
 import { PatientService } from '../services/patientService.js';
 import { sendSuccess } from '../utils/response.js';
+import {
+  updatePatientSchema,
+  patientQuerySchema,
+  patientIdParamSchema,
+} from '../validators/patientValidator.js';
 
 export class PatientController {
-  static async createPatient(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const patient = await PatientService.createPatient(req.body);
-      sendSuccess(res, {
-        statusCode: 201,
-        message: 'Patient created successfully',
-        data: patient,
-      });
-    } catch (error) {
-      next(error);
-    }
+  static async getPatients(req: Request, res: Response): Promise<void> {
+    const query = patientQuerySchema.parse(req.query);
+    const result = await PatientService.getPatients(query);
+
+    sendSuccess(res, {
+      statusCode: 200,
+      data: result.patients,
+      meta: result.meta,
+      headers: {
+        'Cache-Control': 'no-store',
+      },
+    });
   }
 
-  static async getPatients(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const { patients, meta } = await PatientService.getPatients(req.query as any);
-      sendSuccess(res, {
-        statusCode: 200,
-        message: 'Patients retrieved successfully',
-        data: patients,
-        meta,
-      });
-    } catch (error) {
-      next(error);
-    }
+  static async getPatientById(req: Request, res: Response): Promise<void> {
+    const { id } = patientIdParamSchema.parse(req.params);
+    const patient = await PatientService.getPatientById(id);
+
+    sendSuccess(res, {
+      statusCode: 200,
+      data: patient,
+      headers: {
+        ETag: `"${patient.version}"`,
+        'Cache-Control': 'no-store',
+      },
+    });
   }
 
-  static async getPatientById(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const id = req.params.id as string;
-      const patient = await PatientService.getPatientById(id);
-      sendSuccess(res, {
-        statusCode: 200,
-        message: 'Patient retrieved successfully',
-        data: patient,
-      });
-    } catch (error) {
-      next(error);
-    }
+  static async updatePatient(req: Request, res: Response): Promise<void> {
+    const { id } = patientIdParamSchema.parse(req.params);
+    const input = updatePatientSchema.parse(req.body);
+    const expectedVersion = (req as any).expectedVersion;
+    const actorId = req.user.id;
+    const ip = req.ip;
+    const userAgent = req.headers['user-agent'];
+
+    const updated = await PatientService.updatePatient(
+      id,
+      input,
+      expectedVersion,
+      actorId,
+      ip,
+      userAgent
+    );
+
+    sendSuccess(res, {
+      statusCode: 200,
+      data: updated,
+      headers: {
+        ETag: `"${updated.version}"`,
+        'Cache-Control': 'no-store',
+      },
+    });
   }
 
-  static async updatePatient(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const id = req.params.id as string;
-      const patient = await PatientService.updatePatient(id, req.body);
-      sendSuccess(res, {
-        statusCode: 200,
-        message: 'Patient updated successfully',
-        data: patient,
-      });
-    } catch (error) {
-      next(error);
-    }
-  }
+  static async deletePatient(req: Request, res: Response): Promise<void> {
+    const { id } = patientIdParamSchema.parse(req.params);
+    const actorId = req.user.id;
+    const ip = req.ip;
+    const userAgent = req.headers['user-agent'];
 
-  static async deletePatient(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      const id = req.params.id as string;
-      await PatientService.deletePatient(id);
-      sendSuccess(res, {
-        statusCode: 200,
-        message: 'Patient deleted successfully',
-      });
-    } catch (error) {
-      next(error);
-    }
+    await PatientService.deletePatient(id, actorId, ip, userAgent);
+
+    sendSuccess(res, {
+      statusCode: 204,
+    });
   }
 }
