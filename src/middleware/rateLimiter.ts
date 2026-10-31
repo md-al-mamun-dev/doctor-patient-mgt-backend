@@ -3,7 +3,7 @@ import { sendError } from '../utils/response.js';
 
 export const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // 10 attempts per IP
+  max: process.env.NODE_ENV === 'production' ? 10 : 1000, // 10 in production, relaxed in dev/test
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
@@ -33,7 +33,7 @@ export const refreshRateLimiter = rateLimit({
 
 export const apiRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 300, // 300 requests per 15 minutes
+  max: process.env.NODE_ENV === 'production' ? 300 : 5000, // 300 in production, relaxed in dev/test
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {

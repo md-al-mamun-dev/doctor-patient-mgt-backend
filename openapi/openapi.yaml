@@ -16,6 +16,10 @@ tags:
     description: User and staff account administration, role assignment, and session control (Admin only)
   - name: Doctors
     description: Doctor registry, specialty filters, and profile operations
+  - name: Hospitals
+    description: Hospital directory and registry management for doctors and clinical care
+  - name: Specializations
+    description: Doctor specialization directory and taxonomy management
   - name: Patients
     description: Patient registry, medical records, and doctor assignments
   - name: Dashboard
@@ -1108,6 +1112,178 @@ paths:
         '404':
           $ref: '#/components/responses/NotFoundError'
 
+  /hospitals:
+    get:
+      tags: [Hospitals]
+      operationId: getHospitals
+      summary: Retrieve hospitals list
+      description: Returns sorted list of hospitals with optional substring search on name.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Search hospital name
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Hospitals retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Hospital'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags: [Hospitals]
+      operationId: createHospital
+      summary: Register a new hospital
+      description: Adds a new hospital to the directory. Admin only.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+                  example: Square Hospital
+      responses:
+        '201':
+          description: Hospital created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Hospital'
+        '200':
+          description: Hospital already exists
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+  /specializations:
+    get:
+      tags: [Specializations]
+      operationId: getSpecializations
+      summary: Retrieve specializations list
+      description: Returns sorted list of specializations with optional substring search on name.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+          description: Search specialization name
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: Specializations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Specialization'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+    post:
+      tags: [Specializations]
+      operationId: createSpecialization
+      summary: Register a new specialization
+      description: Adds a new doctor specialization to the directory. Admin only.
+      security:
+        - CookieAuth: []
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 2
+                  maxLength: 100
+                  example: Cardiology
+      responses:
+        '201':
+          description: Specialization created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Specialization'
+        '200':
+          description: Specialization already exists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  data:
+                    $ref: '#/components/schemas/Specialization'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
   /dashboard/summary:
     get:
       tags: [Dashboard]
@@ -1391,6 +1567,44 @@ components:
         totalPages:
           type: integer
           example: 5
+
+    Hospital:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          example: 662f3a9e102f43a9b1285cb1
+        name:
+          type: string
+          example: Square Hospital
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Specialization:
+      type: object
+      required:
+        - id
+        - name
+      properties:
+        id:
+          type: string
+          example: 662f3a9e102f43a9b1285cb2
+        name:
+          type: string
+          example: Cardiology
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
 
     RegisterRequest:
       type: object

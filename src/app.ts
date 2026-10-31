@@ -15,6 +15,20 @@ export const app: Application = express();
 // 1. Request ID Tracking
 app.use(requestIdMiddleware);
 
+// 1.1 HTTP Request Logger
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const color = res.statusCode >= 500 ? '\x1b[31m' : res.statusCode >= 400 ? '\x1b[33m' : '\x1b[32m';
+    const reset = '\x1b[0m';
+    console.log(
+      `[${new Date().toISOString()}] [${req.id.slice(0, 8)}] ${req.method} ${req.originalUrl} -> ${color}${res.statusCode}${reset} (${duration}ms)`
+    );
+  });
+  next();
+});
+
 // 2. Global Security & Body Parsing
 app.use(
   cors({
