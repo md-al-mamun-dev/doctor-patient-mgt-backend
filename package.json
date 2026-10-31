@@ -11,6 +11,7 @@
     "start": "node dist/server.js",
     "test": "vitest run",
     "db:setup": "tsx scripts/setup_database_schemas.ts",
+    "seed": "tsx scripts/seed.ts",
     "docs:lint": "redocly lint openapi/openapi.yaml",
     "docs:bundle": "redocly bundle openapi/openapi.yaml -o dist/openapi.yaml",
     "docs:build": "redocly build-docs openapi/openapi.yaml -o dist/api-docs.html"
