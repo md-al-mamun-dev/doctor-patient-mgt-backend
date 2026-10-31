@@ -114,19 +114,29 @@ export const updatePatientSchema = z
     }
   );
 
-export const patientQuerySchema = z.object({
-  page: z.coerce.number().int().min(1, 'Page must be 1 or greater').default(1),
-  limit: z.coerce.number().int().min(1).max(100, 'Limit cannot exceed 100').default(10),
-  doctorId: z
-    .string()
-    .regex(/^[0-9a-fA-F]{24}$/, 'Invalid doctor ID format')
-    .optional(),
-  condition: z.string().trim().optional(),
-  q: z.string().trim().optional(),
-  from: z.string().trim().optional(),
-  to: z.string().trim().optional(),
-  sort: z.enum(['-admissionDate', 'admissionDate', 'name']).default('-admissionDate'),
-});
+export const patientQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1, 'Page must be 1 or greater').default(1),
+    limit: z.coerce.number().int().min(1).max(100, 'Limit cannot exceed 100').default(10),
+    doctorId: z
+      .string()
+      .regex(/^[0-9a-fA-F]{24}$/, 'Invalid doctor ID format')
+      .optional(),
+    condition: z.string().trim().optional(),
+    q: z.string().trim().optional(),
+    search: z.string().trim().optional(),
+    from: z.string().trim().optional(),
+    to: z.string().trim().optional(),
+    createdFrom: z.string().trim().optional(),
+    createdTo: z.string().trim().optional(),
+    sort: z.enum(['-admissionDate', 'admissionDate', 'name']).default('-admissionDate'),
+  })
+  .transform((data) => ({
+    ...data,
+    q: data.q || data.search,
+    from: data.from || data.createdFrom,
+    to: data.to || data.createdTo,
+  }));
 
 export const patientIdParamSchema = z.object({
   id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid patient ID format'),
