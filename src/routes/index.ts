@@ -7,6 +7,7 @@ import { dashboardRoutes } from './dashboardRoutes.js';
 import { auditLogRoutes } from './auditLogRoutes.js';
 import { healthRoutes } from './healthRoutes.js';
 import { hospitalRoutes } from './hospitalRoutes.js';
+import { specializationRoutes } from './specializationRoutes.js';
 
 export const routes = Router();
 
@@ -15,6 +16,7 @@ routes.use('/users', userRoutes);
 routes.use('/doctors', doctorRoutes);
 routes.use('/patients', patientRoutes);
 routes.use('/hospitals', hospitalRoutes);
+routes.use('/specializations', specializationRoutes);
 routes.use('/dashboard', dashboardRoutes);
 routes.use('/audit-logs', auditLogRoutes);
 routes.use('/health', healthRoutes);

@@ -4,4 +4,5 @@ export * from './Doctor.js';
 export * from './Patient.js';
 export * from './AuditLog.js';
 export * from './Hospital.js';
+export * from './Specialization.js';
 
