@@ -6,7 +6,7 @@ import {
   clearAuthCookies,
   extractRefreshToken,
 } from '../utils/token.js';
-import type { LoginInput, ChangePasswordInput, RegisterInput } from '../validators/authValidator.js';
+import type { LoginInput, ChangePasswordInput } from '../validators/authValidator.js';
 
 export class AuthController {
   static async login(req: Request, res: Response): Promise<void> {
@@ -88,17 +88,6 @@ export class AuthController {
       data: {
         user: result.user,
       },
-    });
-  }
-
-  // Legacy register endpoint support
-  static async register(req: Request, res: Response): Promise<void> {
-    const input = req.body as RegisterInput;
-    const result = await AuthService.register(input);
-
-    sendSuccess(res, {
-      statusCode: 201,
-      data: result,
     });
   }
 }

@@ -13,14 +13,5 @@ export const changePasswordSchema = z.object({
     .max(128, 'Password cannot exceed 128 characters'),
 });
 
-// Legacy register schema support
-export const registerSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters').max(100),
-  email: z.string().email('Invalid email address').toLowerCase().trim(),
-  password: z.string().min(15, 'Password must be at least 15 characters long'),
-  role: z.enum(['admin', 'staff', 'doctor', 'patient']).default('staff'),
-});
-
 export type LoginInput = z.infer<typeof loginSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
-export type RegisterInput = z.infer<typeof registerSchema>;

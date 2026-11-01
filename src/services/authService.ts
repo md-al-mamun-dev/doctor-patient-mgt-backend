@@ -18,7 +18,7 @@ import {
   SESSION_MAX_TTL_MS,
 } from '../utils/token.js';
 import { invalidateCachedUser } from '../utils/userCache.js';
-import type { LoginInput, ChangePasswordInput, RegisterInput } from '../validators/authValidator.js';
+import type { LoginInput, ChangePasswordInput } from '../validators/authValidator.js';
 
 export interface SessionInfo {
   startedAt: Date;
@@ -419,39 +419,6 @@ export class AuthService {
       },
       accessToken,
       refreshToken: rawRefreshToken,
-    };
-  }
-
-  // Legacy register helper
-  static async register(input: RegisterInput): Promise<{ user: Partial<IUser>; token: string }> {
-    const existing = await User.findOne({ email: input.email });
-    if (existing) {
-      throw new AppError('A user with this email already exists', 409, 'CONFLICT');
-    }
-
-    const passwordHash = await hashPassword(input.password);
-    const user = await User.create({
-      name: input.name,
-      email: input.email,
-      passwordHash,
-      role: input.role,
-      mustChangePassword: false,
-    });
-
-    const token = signAccessToken({
-      sub: user._id.toString(),
-      role: user.role,
-      sid: randomUUID(),
-    });
-
-    return {
-      user: {
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-      },
-      token,
     };
   }
 }

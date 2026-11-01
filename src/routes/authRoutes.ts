@@ -6,7 +6,6 @@ import { loginRateLimiter, refreshRateLimiter } from '../middleware/rateLimiter.
 import {
   loginSchema,
   changePasswordSchema,
-  registerSchema,
 } from '../validators/authValidator.js';
 
 export const authRoutes = Router();
@@ -22,6 +21,3 @@ authRoutes.post(
   validate({ body: changePasswordSchema }),
   AuthController.changePassword
 );
-
-// Legacy registration endpoint for test compatibility
-authRoutes.post('/register', validate({ body: registerSchema }), AuthController.register);
